@@ -17,8 +17,10 @@ me._decoder = new Decoder({url: url});
 me._autoCompleter = new AutoComplete({});
 me._autoCompleter.init();
 me._directionService = new google.maps.DirectionsService();
-debugger;
-var geoLocater = document.getElementById("autocomplete");
+var geoLocater = document
+    .getElementById("autocomplete")
+    .addEventListener("focus", me._autoCompleter.geolocate.bind(me._autoCompleter));
+
 
 
 
