@@ -1,75 +1,111 @@
-// This example displays an address form, using the autocomplete feature
-// of the Google Places API to help users fill in the information.
+function AutocompleteDirectionsHandler(map) {
+    this.map = map;
+    this.originPlaceId = null;
+    this.destinationPlaceId = null;
+    this.travelMode = 'WALKING';
+    var originInput = document.getElementById('origin-input');
+    var destinationInput = document.getElementById('destination-input');
+    var modeSelector = document.getElementById('mode-selector');
+    this.directionsService = new google.maps.DirectionsService;
+    this.directionsDisplay = new google.maps.DirectionsRenderer;
+    this.directionsDisplay.setMap(map);
 
-// This example requires the Places library. Include the libraries=places
-// parameter when you first load the API. For example:
-// <script src="https://maps.googleapis.com/maps/api/js?key=YOUR_API_KEY&libraries=places">
+    var originAutocomplete = new google.maps.places.Autocomplete(
+        originInput, {placeIdOnly: true});
+    var destinationAutocomplete = new google.maps.places.Autocomplete(
+        destinationInput, {placeIdOnly: true});
 
-function AutoComplete() {
-    var me = this;
-    me.autocomplete;
-    me.placeSearch;
-    me.componentForm = {
-        street_number: 'short_name',
-        route: 'long_name',
-        locality: 'long_name',
-        administrative_area_level_1: 'short_name',
-        country: 'long_name',
-        postal_code: 'short_name'
-    };
+    this.setupClickListener('changemode-walking', 'WALKING');
+    this.setupClickListener('changemode-transit', 'TRANSIT');
+    this.setupClickListener('changemode-driving', 'DRIVING');
+
+    this.setupPlaceChangedListener(originAutocomplete, 'ORIG');
+    this.setupPlaceChangedListener(destinationAutocomplete, 'DEST');
+
+    this.map.controls[google.maps.ControlPosition.TOP_LEFT].push(originInput);
+    this.map.controls[google.maps.ControlPosition.TOP_LEFT].push(destinationInput);
+    this.map.controls[google.maps.ControlPosition.TOP_LEFT].push(modeSelector);
 }
 
-// Bias the autocomplete object to the user's geographical location,
-// as supplied by the browser's 'navigator.geolocation' object.
-AutoComplete.prototype.geolocate = function geolocate() {
+
+// Sets a listener on a radio button to change the filter type on Places
+// Autocomplete.
+AutocompleteDirectionsHandler.prototype.setupClickListener = function(id, mode) {
+    var radioButton = document.getElementById(id);
     var me = this;
-    if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(function(position) {
-            var geolocation = {
-                lat: position.coords.latitude,
-                lng: position.coords.longitude
-            };
-            var circle = new google.maps.Circle({
-                center: geolocation,
-                radius: position.coords.accuracy
-            });
-            me.autocomplete.setBounds(circle.getBounds());
-        });
-    }
+    radioButton.addEventListener('click', function() {
+        me.travelMode = mode;
+        me.route();
+    });
 };
 
-AutoComplete.prototype.fillInAddress = function fillInAddress() {
+AutocompleteDirectionsHandler.prototype.setupPlaceChangedListener = function(autocomplete, mode) {
     var me = this;
-    // Get the place details from the autocomplete object.
-    var place = me.autocomplete.getPlace();
-
-    for (var component in me.componentForm) {
-        document.getElementById(component).value = '';
-        document.getElementById(component).disabled = false;
-    }
-
-    // Get each component of the address from the place details
-    // and fill the corresponding field on the form.
-    for (var i = 0; i < place.address_components.length; i++) {
-        var addressType = place.address_components[i].types[0];
-        if (me.componentForm[addressType]) {
-        var val = place.address_components[i][me.componentForm[addressType]];
-        document.getElementById(addressType).value = val;
+    autocomplete.bindTo('bounds', this.map);
+    autocomplete.addListener('place_changed', function() {
+        var place = autocomplete.getPlace();
+        if (!place.place_id) {
+        window.alert("Please select an option from the dropdown list.");
+        return;
         }
+        if (mode === 'ORIG') {
+        me.originPlaceId = place.place_id;
+        } else {
+        me.destinationPlaceId = place.place_id;
+        }
+        me.route();
+    });
+
+};
+
+AutocompleteDirectionsHandler.prototype.route = function() {
+    if (!this.originPlaceId || !this.destinationPlaceId) {
+        return;
     }
-};
-
-AutoComplete.prototype.init = function init() {
     var me = this;
-    // Create the autocomplete object, restricting the search to geographical
-    // location types.
-    me.autocomplete = new google.maps.places.Autocomplete(
-        /** @type {!HTMLInputElement} */(document.getElementById('autocomplete')),
-        {types: ['geocode']});
 
-    // When the user selects an address from the dropdown, populate the address
-    // fields in the form.
-    me.autocomplete.addListener('place_changed', me.fillInAddress.bind(me));
+    this.directionsService.route({
+        origin: {'placeId': this.originPlaceId},
+        destination: {'placeId': this.destinationPlaceId},
+        travelMode: this.travelMode
+    }, function(response, status) {
+        if (status === 'OK') {
+            debugger;
+            me.directionsDisplay.setDirections(response);
+            var streetviews = document.getElementById("streetviews");
+            response.routes.forEach(function(route) {
+               route.legs.forEach(function(leg) {
+                    leg.steps.forEach(function(step, index) {
+                        if(index >= 0) {
+                            var pos = {
+                                lat: step.start_location.lat(),
+                                lng: step.start_location.lng()
+                            };
+
+                            var newPanoElement = document.createElement("div");
+                            newPanoElement.id = "pano" + pos.lat + pos.lng;
+                            newPanoElement.setAttribute("class", "map");          
+                            streetviews.appendChild(newPanoElement);
+
+                            var newPanorama = new google.maps.StreetViewPanorama(
+                                newPanoElement, {
+                                    position: pos,
+                                    pov: {
+                                        heading: 34,
+                                        pitch: 10,
+                                        zoom: 1
+                                    }
+                                }
+                            );
+                        }
+                    });
+               });
+            });
+
+        } else {
+            window.alert('Directions request failed due to ' + status);
+        }
+    });
 };
 
-module.exports = AutoComplete;
+module.exports = AutocompleteDirectionsHandler;
